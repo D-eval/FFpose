@@ -2,6 +2,15 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+from abc import ABC, abstractmethod
+
+# 用无监督学习的技巧，把关节表示为离散token并还原。
+# 仅需encoder就可以搞定
+
+# 自动编码器
+# (B,T,N,d) -> (B,T,D) {1,...,M} -> (B,T,N,d)
+
+
 # 采样率调低，比如 10Hz
 
 # (B,T,N,d)
@@ -29,8 +38,21 @@ import torch.nn.functional as F
 # goodness的计算涉及pool,只用到stride以内的最大值
 # 时间上的相似度尽可能小
 
+class ForwardForwardModule(nn.Module,ABC):
+    def __init__(self):
+        super().__init__()
+    @abstractmethod
+    def normless_forward(self, *args, **kwargs):
+        """必须实现：无 layer norm 的前向传播"""
+        pass
+    @abstractmethod
+    def get_loss(self, *args, **kwargs):
+        """必须实现：局部 loss 计算"""
+        pass
+
+
 # layer1: 
-class Layer1(nn.Module):
+class Layer1(ForwardForwardModule):
     def __init__(self,d,D,joint_num,kernel_size):
         # kernel_size=5, fps=10, 每个卷积核感受0.5秒
         super().__init__()
@@ -53,6 +75,7 @@ class Layer1(nn.Module):
         y = self.apply_conv1d(x) # (B*N*d,D,T)
         z = F.relu(y)
         z = F.max_pool1d(z, kernel_size=self.kernel_size) # (B*N*d,D,T//2) T1=T//2
+        # 把 B*N*d 个样本分成 B 类
         T1 = z.shape[-1]
         z = torch.reshape(z,(B,N,d,D,T1)) # (B,N,d,D,T1)
         z = z.permute(0,4,1,2,3) # (B,T1,N,d,D)
@@ -94,14 +117,23 @@ class Layer1(nn.Module):
         w = torch.softmax(z,dim=1) # (B,T1,N,d,D)
         return w
 
-# 空间融合
-class SpatialAttention(nn.Module):
-    def __init__(self,d,D1,D2,num_heads):
+# 空间识别
+class Layer2(ForwardForwardModule):
+    def __init__(self,num_joints,d,D):
         super().__init__()
-        assert D2 % num_heads == 0, "必须有 num_heads 整除 D2"
-        self.q = nn.Linear(D1, D2)
-        self.k = nn.Linear(D1, D2)
-        self.v = nn.Linear(D1, D2)
-    def forward(self, x):
-        # x: (B,T1,N,d,D1)
-        pass
+        # (B,T,N*d)
+        d_in = num_joints * d
+        self.linear = nn.Linear(d_in, D)
+        
+    def normless_forward(self, x):
+        # x: (B,T,N,d)
+        B,T,N,d = x.shape
+        x = torch.flatten(x,2,3) # (B,T,N*d)
+        y = self.linear(x)
+        z = self.relu(y)
+        return z # (B,T,D)
+    
+
+
+
+# 空间的抽象表示和时间抽象表示应当相似。
