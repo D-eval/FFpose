@@ -20,3 +20,4 @@ from abc import ABC, abstractmethod
 # (B,N*d,T) -conv1d-> (B,D,T) (N*d * D) * K
 # (B,N,d)(T) : 把(B,N,d)当作一个样本，包含T个特征
 # (B,T,N,d) -> (B,T,N,d,1) -> (B*N*d,1,T) -> (B*N*d,D,T) -> (B,T,N,d,D+1)
+
