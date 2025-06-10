@@ -14,3 +14,12 @@ train_set = AMASSDataset(data_path,
                          target_fps=1,
                          use_6d=True)
 
+all_cls = []
+for i in range(len(train_set)):
+    x, label = train_set[i]
+    if label in all_cls:
+        continue
+    else:
+        all_cls.append(label)
+
+ 

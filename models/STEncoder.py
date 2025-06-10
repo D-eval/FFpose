@@ -28,18 +28,21 @@ class LocalSTEncoder(nn.Module):
         self.d_in = d_in
         self.d_out = d_out
         self.time_len = time_len
-        # 三维卷积
-        dim_in = d_in * num_neighbors * time_len
+        # 邻接关节和自身时间
+        dim_in = d_in * ((num_neighbors-1) + time_len)
         self.proj = MLP(dim_in, d_out*2,
                         num_layers, 
                         "linear", 0.1, False)
         self.lin_mean = nn.Linear(d_out*2, d_out)
         self.lin_log_var = nn.Linear(d_out*2, d_out)
-    def forward(self,x):
-        # x: (B,dT,dN,d)
+    def forward(self,x_spa,x_tem):
+        # x_spa: (B,dN,d)
+        # x_tem: (B,dT,d)
         # return: z: (B,D)
-        B,dT,dN,d = x.shape
+        B,dN,d = x_spa.shape
+        B,dT,d = x_tem.shape
         assert (dT,dN,d)==(self.time_len,self.num_neighbors,self.d_in)
+        x_st = torch.cat([x_spa,x_tem], dim=1)
         x = torch.flatten(x,1,-1) # (B,-1)
         h = self.proj(x)
         mu = self.lin_mean(h)
@@ -60,16 +63,19 @@ class LocalSTDecoder(nn.Module):
         self.d_recons = d_recons
         self.time_len = time_len
         # 三维卷积
-        dim_out = d_recons * num_neighbors * time_len
+        dim_out = d_recons * ((num_neighbors-1) + time_len)
         self.proj = nn.Linear(d_latent,dim_out)
         self.dim_out = dim_out
     def forward(self,z):
         # z: (B,D)
-        # return: x: (B,dT,dN,d)
+        # return: x_spa: (B,dN,d), x_tem: (B,dT,d)
         B,D = z.shape
         assert (D)==(self.d_latent)
         dT,dN,d = self.time_len,self.num_neighbors,self.d_recons
         x = self.proj(z) # (B,dim_out)
+        x = torch.reshape(x,(B,-1,d))
+        x_spa = x[:,:(dN-1),:]
+        x_tem = x[:,(dN-1):,:]
         assert x.shape[1]==self.dim_out, 'got dim:'.format(x.shape[1])
         x = torch.reshape(x,(B,dT,dN,d))
         return x
