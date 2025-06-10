@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 # 局部形状重构
 # (B,dT,dN,d) -> (B,D) -> (B,dT,dN,d)
 
-from STEncoder import LocalSTEncoder
+from .STEncoder import LocalAE
 
 def cal_kl_div(mu, logvar):
     kl_div = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
@@ -22,7 +22,7 @@ class LocalMonopolyMoE(nn.Module):
         super().__init__()
         self.num_experts = num_experts
         self.all_experts = nn.ModuleList([
-            LocalSTEncoder(joint_idx,num_neighbors,
+            LocalAE(joint_idx,num_neighbors,
                            d_in,d_out,
                            time_len,num_layers) # 没法用 batch_norm
             for e in range(num_experts)
@@ -36,11 +36,11 @@ class LocalMonopolyMoE(nn.Module):
         all_loss = torch.zeros((B,E))
         others = []
         for e,expert in enumerate(self.all_experts):
-            losses, mu_logvar_xhat = expert.get_recon_loss(x) # (B,)
+            losses, mu_logvar_xtemspahat = expert.get_recon_loss(x) # (B,)
             all_loss[:,e] = losses
-            others += [mu_logvar_xhat]
+            others += [mu_logvar_xtemspahat]
         return all_loss, others
-    def sparse_others(self,others, expert_idx):
+    def sparse_others(self,others,expert_idx):
         # others: [(mu,logvar,x_hat) x E] :
         # [((B,D),(B,D),(B,dT,dN,d)) x E]
         # expert_idx: (B,)
@@ -51,14 +51,14 @@ class LocalMonopolyMoE(nn.Module):
         for b, e in enumerate(expert_idx):
             mu = others[e][0][b] # (D)
             logvar = others[e][1][b] # (D)
-            xhat = others[e][2][b] # (dT,dN,d)
+            xhat = others[e][2][1][b] # (dN,d)
             # 储存
             all_mu += [mu]
             all_logvar += [logvar]
             all_xhat += [xhat]
         all_mu = torch.stack(all_mu) # (B,D)
         all_logvar = torch.stack(all_logvar)
-        all_xhat = torch.stack(all_xhat)
+        all_xhat = torch.stack(all_xhat) # (B,dN,d)
         return all_mu, all_logvar, all_xhat
     def encode(self, x, expert_idx):
         # x: (B,dT,dN,d)
@@ -67,20 +67,21 @@ class LocalMonopolyMoE(nn.Module):
         all_mu = []
         all_logvar = []
         for b, e in enumerate(expert_idx):
-            mu, logvar = self.all_experts[e].encode(x[b].unsqueeze(0))
+            mu, logvar, x_hat = self.all_experts[e].encode(x[b].unsqueeze(0))
             all_mu += [mu]
             all_logvar += [logvar]
         all_mu = torch.cat(all_mu, dim=0)
         all_logvar = torch.cat(all_logvar, dim=0)
-        return all_mu, all_logvar
+        return all_mu, all_logvar, x_hat
     def get_loss(self, x, kl_weight=0):
+        # x: (B,dT,dN,d)
         # (B,D)
         all_loss, others = self.everyone_try_this_problem(x) # (B,E)
         # loss_recons
         losses, expert_idx = torch.min(all_loss, dim=1) # (B,)
         loss_recons = losses.mean()
         # loss_kl
-        mu, logvar, _ = self.sparse_others(others, expert_idx)
+        mu, logvar, x_hat = self.sparse_others(others, expert_idx)
         loss_kl = cal_kl_div(mu, logvar)
         loss = loss_recons + kl_weight * loss_kl
         return loss, expert_idx
@@ -89,8 +90,8 @@ class LocalMonopolyMoE(nn.Module):
         # forward是编码
         all_loss, others = self.everyone_try_this_problem(x)
         losses, expert_idx = torch.min(all_loss, dim=1)
-        mu, logvar, xhat = self.sparse_others(others, expert_idx)
-        return mu, logvar, xhat
+        mu, logvar, x_hat = self.sparse_others(others, expert_idx)
+        return mu, logvar, x_hat
 
     def update_memory(self, expert_idx):
         # (B,)

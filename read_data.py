@@ -222,9 +222,10 @@ def collate_fn_min_seq(batch):
 
 
 def get_all_start_idx(seq_len,batch_len):
+    # print(seq_len,batch_len)
     if seq_len < batch_len:
         return None
-    interval = batch_len // 4
+    interval = batch_len // 4 if batch_len>=4 else batch_len
     max_start_idx = (seq_len - batch_len)
     return np.arange(0,max_start_idx,interval)
 
@@ -266,7 +267,7 @@ class AMASSDataset(Dataset):
         :param root_dir: 根目录，例如 'ACCAD'
         """
         self.time_len = time_len
-        self.batch_len = time_len * target_fps
+        self.batch_len = int(time_len * target_fps)
         self.root_dir = root_dir
         self.num_joints = 52 if use_hand else 21
         self.use_hand = use_hand
@@ -293,7 +294,7 @@ class AMASSDataset(Dataset):
                             if full_pose is None:
                                 continue
                             pose_len = full_pose.shape[0]
-                            
+                            # print(pose_len)
                             # 是下采样后的start_idx
                             start_idxs = get_all_start_idx(pose_len, self.batch_len)
                             if start_idxs is not None:
@@ -354,7 +355,7 @@ class AMASSDataset(Dataset):
         npz_path, text, start_idx = self.samples[idx]
         num_joints = self.num_joints
         bdata = np.load(npz_path)
-        full_pose = torch.Tensor(bdata['poses']) # (T,N*3)
+        full_pose = torch.Tensor(bdata['poses']) # (T,N*3g)
         
         fps = int(bdata['mocap_framerate'].item())
         target_fps = self.target_fps
