@@ -14,6 +14,8 @@ time_len_merge = 3
 mlp_layers = 3
 
 
+kl_weight = 0.01
+
 device = torch.device("cuda")
 
 data_path = ["/home/vipuser/DL/Dataset100G/AMASS/SMPL_H_G/CMU"]
@@ -37,3 +39,13 @@ monopoly = GlobalmonopolyMoE(joint_neighbor_dict=joint_neighbor_dict,
                              num_experts=num_experts,
                              d_in=d_in,d_out=d_out,
                              time_len_merge=time_len_merge,mlp_layers=mlp_layers)
+
+monopoly.to(device)
+
+x, label = train_set[0]
+x = x.unsqueeze(0).to(device)
+
+loss, expert_idx = monopoly.get_loss(x, kl_weight=kl_weight)
+
+# for i in range(23):
+#     print(x[:,:,joint_neighbor_dict[i],:].shape)

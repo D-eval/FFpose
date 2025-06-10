@@ -38,7 +38,7 @@ class GlobalmonopolyMoE(nn.Module):
         neighbors = self.joint_neighbor_dict[j]
         dt_half = self.time_len_merge // 2
         dx = x[:,:,neighbors,:]
-        joint_monopoly = self.localMoE[j]
+        joint_monopoly = self.localMoE[str(j)]
         loss, expert_idx = joint_monopoly.get_loss(dx,kl_weight=kl_weight)
         return loss, expert_idx
     def get_loss(self,x,kl_weight=0):

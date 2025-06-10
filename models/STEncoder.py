@@ -43,7 +43,7 @@ class LocalSTEncoder(nn.Module):
         B,dT,d = x_tem.shape
         assert (dT,dN,d)==(self.time_len,self.num_neighbors,self.d_in)
         x_st = torch.cat([x_spa[:,1:],x_tem], dim=1)
-        x = torch.flatten(x,1,-1) # (B,-1)
+        x = torch.flatten(x_st,1,-1) # (B,-1)
         h = self.proj(x)
         mu = self.lin_mean(h)
         log_var = self.lin_log_var(h)
@@ -146,10 +146,11 @@ class LocalAE(nn.Module):
     def get_recon_loss(self, x):
         # x: (B,dT,dN,d)
         x_tem, x_spa = self.x_to_spa_tem(x)
+        # x_spa: (B,dN,d)
         mu, logvar = self.encode(x)
         x_tem_hat, x_spa_hat = self.decode(mu)
-        l2_spa = ((x_spa - x_spa_hat)**2).mean(dim=1)
-        l2_tem = ((x_tem - x_tem_hat)**2).mean(dim=1) # (B,)
+        l2_spa = ((x_spa - x_spa_hat)**2).sum(dim=-1).mean(-1)
+        l2_tem = ((x_tem - x_tem_hat)**2).sum(dim=-1).mean(-1) # (B,)
         l2 = l2_tem + l2_spa
         return l2, (mu,logvar,(x_tem_hat, x_spa_hat))
 

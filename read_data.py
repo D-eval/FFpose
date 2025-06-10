@@ -269,7 +269,7 @@ class AMASSDataset(Dataset):
         self.time_len = time_len
         self.batch_len = int(time_len * target_fps)
         self.root_dir = root_dir
-        self.num_joints = 52 if use_hand else 21
+        self.num_joints = 52 if use_hand else 24
         self.use_hand = use_hand
         self.target_fps = target_fps
         self.use_6d = use_6d
