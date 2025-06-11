@@ -40,6 +40,45 @@ import random
 # 替换为你的保存目录
 save_dir = '/home/vipuser/DL/Dataset50G/save'
 
+
+
+def normalize_vector(v, return_mag=False):
+    # v: (batch_size, n)
+    v_mag = torch.norm(v, dim=-1, keepdim=True)  # (batch_size, 1)
+    v_mag = torch.clamp(v_mag, min=1e-6)
+    v_normalized = v / v_mag
+    if return_mag:
+        return v_normalized, v_mag.squeeze(-1)
+    else:
+        return v_normalized
+
+
+def cross_product(u, v):
+    # u, v: (batch_size, 3)
+    i = u[:, 1] * v[:, 2] - u[:, 2] * v[:, 1]
+    j = u[:, 2] * v[:, 0] - u[:, 0] * v[:, 2]
+    k = u[:, 0] * v[:, 1] - u[:, 1] * v[:, 0]
+    out = torch.stack([i, j, k], dim=1)  # (batch_size, 3)
+    return out
+
+
+def compute_rotation_matrix_from_ortho6d(ortho6d):
+    # ortho6d: (B, 6) -> (B, 3, 3)
+    # 行向量是基向量
+    x_raw = ortho6d[:, 0:3]  # (batch_size, 3)
+    y_raw = ortho6d[:, 3:6]  # (batch_size, 3)
+
+    x = normalize_vector(x_raw)           # (batch_size, 3)
+    z = normalize_vector(cross_product(x, y_raw))  # (batch_size, 3)
+    y = cross_product(z, x)               # (batch_size, 3)
+
+    x = x.unsqueeze(-2)  # (batch_size,1, 3)
+    y = y.unsqueeze(-2)
+    z = z.unsqueeze(-2)
+    matrix = torch.cat([x, y, z], dim=-2)  # (batch_size, 3, 3)
+    return matrix
+
+
 class Processor:
     def __init__(self,device,use_hand=True):
         # device = torch.device('cuda')
@@ -82,10 +121,20 @@ class Processor:
         rot_mats = torch.Tensor(rot_mats).to(self.device)
         return rot_mats
     
+    def trans_6d_to_9d(self, x):
+        # x: (T,N,6)
+        # return: (T,N,9)
+        T,N,d = x.shape
+        assert d==6
+        output_rot_mat = torch.flatten(x,0,1) # (T*N,6)
+        output_rot_mat = compute_rotation_matrix_from_ortho6d(output_rot_mat)
+        output_rot_mat = torch.reshape(output_rot_mat, (T,N,9))
+        return output_rot_mat
+    
     def write_bvh(self,rot_mats,root_motion=None,bdata=None,filename='real.bvh',save_dir=None):
         save_dir = "/home/vipuser/DL/Dataset50G/save" if save_dir is None else save_dir
         # bdata: smplx .npz data
-        # rot_mats: (t,52,9) or (t,21,9)
+        # rot_mats: (t,52,9) or (t,24,9)
         # filename: path/to/yourfile.bvh
         use_rot_mats = (rot_mats is not None)
         if rot_mats is None:
@@ -369,6 +418,10 @@ class AMASSDataset(Dataset):
         rot_mats = torch.flatten(rot_mats,-2,-1)
         label = int(text[:-4].split("_")[-2])
         return rot_mats[start_idx:start_idx+self.batch_len, :num_joints], label  # (seq_len, num_joints, joint_size)
+
+    def get_a_rand_data(self):
+        idx = random.randint(0,len(self)-1)
+        return self[idx]
 
     def apply_train_valid_divide(self, train=True, split_ratio=0.9, seed=42):
         # mode: {0,1} 1为train, 0为valid
