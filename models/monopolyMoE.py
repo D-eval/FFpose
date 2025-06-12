@@ -61,7 +61,6 @@ class MonoMoE(nn.Module):
         all_mu = torch.cat(all_mu, dim=0)
         all_logvar = torch.cat(all_logvar, dim=0)
         return all_mu, all_logvar
-
     def get_loss(self, x, kl_weight=0):
         # (B,D)
         all_loss, others = self.everyone_try_this_problem(x) # (B,E)
@@ -75,12 +74,25 @@ class MonoMoE(nn.Module):
         return loss, expert_idx
     def forward(self, x):
         # x: (B,d)
-        # forward是编码
+        # return:
+        # losses: (B,)
         all_loss, others = self.everyone_try_this_problem(x)
         losses, expert_idx = torch.min(all_loss, dim=1)
         mu, logvar, xhat = self.sparse_others(others, expert_idx)
-        return mu, logvar, xhat
-
+        return mu, logvar, xhat, expert_idx, losses
+    def decode(self, z, e_id):
+        # z: (B,D)
+        # e_id: (B,)
+        # return: x: (B,d)
+        B,D = z.shape
+        all_x = []
+        for b in range(B):
+            z_b = z[b].unsqueeze(0)
+            idx = e_id[b]
+            x_b = self.all_experts[idx].decode(z_b)
+            all_x += [x_b]
+        xhat = torch.cat(all_x,dim=0)
+        return xhat
     def update_memory(self, expert_idx):
         # (B,)
         for e in expert_idx:

@@ -75,7 +75,6 @@ class GlobalmonopolyMoE(nn.Module):
         B,dT,N,d = x.shape
         assert self.time_len_merge==dT
         neighbors = self.group_joint_dict[g]
-        dt_half = self.time_len_merge // 2
         dx = x[:,:,neighbors,:] # (B,dT,dN,d)
         joint_monopoly = self.localMoE[g]
         mu, logvar, x_hat, expert_idx = joint_monopoly(dx)
@@ -120,6 +119,23 @@ class GlobalmonopolyMoE(nn.Module):
             group_xhat[g] = x_hat
         out_xhat = self.local_dict_to_global_xhat(group_xhat)
         return group_mu, group_logvar, out_xhat, group_expert_idx
+    def decode_g(self,z,g,expert_idx):
+        # z: (B,D)
+        # expert_idx: (B,)
+        local_MoE = self.localMoE(g)
+        x_hat = local_MoE.decode(z, expert_idx)
+        return x_hat
+    def decode(self,z,expert_idx):
+        # z: { G:(B,D) }
+        # expert_idx: { G:(B,) }
+        x_dict = {}
+        for g in z.keys():
+            local_z = z[g] # (B,D)
+            local_expert_idx = expert_idx[g]
+            local_xhat = self.decode_g(local_z,g,local_expert_idx)
+            x_dict[g] = local_xhat
+        xhat = self.local_dict_to_global_xhat(x_dict)
+        return xhat
     # 以下是 pretrain function
     def soldier_step_out(self,x,g,e):
         # x: (B,dT,N,d)

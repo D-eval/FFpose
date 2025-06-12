@@ -66,8 +66,7 @@ class LocalSTDecoder(nn.Module):
     def forward(self,z):
         # z: (B,D)
         # return: 
-        # x_spa: (B,dN,d), 
-        # x_tem: (B,dT,d)
+        # x: (B,dT,dN,d)
         B,D = z.shape
         assert (D)==(self.d_latent)
         dT,dN,d = self.time_len,self.num_neighbors,self.d_recons

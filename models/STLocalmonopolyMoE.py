@@ -103,6 +103,19 @@ class LocalMonopolyMoE(nn.Module):
         all_mu = torch.cat(all_mu, dim=0)
         all_logvar = torch.cat(all_logvar, dim=0)
         return all_mu, all_logvar
+    def decode(self, z, expert_idx):
+        # z: (B,D)
+        # expert_idx: (B,)
+        # return: (B,dT,dN,d)
+        B,D = z.shape
+        all_xhat = []
+        for b in range(B):
+            idx = expert_idx[b]
+            expert = self.all_experts[idx]
+            xhat = expert.decode(z[b].unsqueeze(0))
+            all_xhat += [xhat]
+        all_xhat = torch.cat(all_xhat,dim=0)
+        return all_xhat
     def get_loss(self, x, kl_weight=0):
         # x: (B,dT,dN,d)
         # (B,D)
