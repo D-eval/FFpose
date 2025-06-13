@@ -122,7 +122,7 @@ class GlobalmonopolyMoE(nn.Module):
     def decode_g(self,z,g,expert_idx):
         # z: (B,D)
         # expert_idx: (B,)
-        local_MoE = self.localMoE(g)
+        local_MoE = self.localMoE[g]
         x_hat = local_MoE.decode(z, expert_idx)
         return x_hat
     def decode(self,z,expert_idx):
@@ -136,6 +136,21 @@ class GlobalmonopolyMoE(nn.Module):
             x_dict[g] = local_xhat
         xhat = self.local_dict_to_global_xhat(x_dict)
         return xhat
+    def merge_cluster(self,expert_idx,
+                      merge_group=["arm_R","leg_L","waist"]):
+        # expert_idx: { G:(B,) }
+        # return: (B,)
+        assert self.group_num_experts["arm_R"]==5
+        B = expert_idx["arm_R"].shape[0]
+        weigths = {}
+        w = 1
+        for g in merge_group:
+            weigths[g] = w
+            w *= 5
+        merged_cluster = torch.zeros((B,))
+        for g in merge_group:
+            merged_cluster += expert_idx[g] * weigths[g]
+        return merged_cluster.to(torch.long)
     # 以下是 pretrain function
     def soldier_step_out(self,x,g,e):
         # x: (B,dT,N,d)

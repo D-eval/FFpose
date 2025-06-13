@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from MLP import MLP
+from .MLP import MLP
 
 class MuSigmaEncoder(nn.Module):
     def __init__(self, input_dim, latent_dim, num_mlp_layers):

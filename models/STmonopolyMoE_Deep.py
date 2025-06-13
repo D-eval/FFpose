@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 
 from .STmonopolyMoE import GlobalmonopolyMoE
 
-from monopolyMoE import MonoMoE
+from .monopolyMoE import MonoMoE
 
 def cal_kl_div(mu, logvar):
     kl_div = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
@@ -20,20 +20,20 @@ class DeepME(nn.Module):
     def __init__(self,group_joint_dict,
                  group2_group_dict,
                  group_num_experts,
-                 d_in,d_out,
+                 d_in,d_mid,
                  time_len_merge,mlp_layers,
                  num_experts_second,
                  d_final):
         super().__init__()
         self.layer1 = GlobalmonopolyMoE(group_joint_dict=group_joint_dict,
                                         group_num_experts=group_num_experts,
-                                        d_in=d_in,d_out=d_out,
+                                        d_in=d_in,d_out=d_mid,
                                         time_len_merge=time_len_merge,
                                         mlp_layers=mlp_layers)
         group_num = len(group_joint_dict.keys())
         self.group_num = group_num
-        self.D1 = d_out
-        d_latent = d_out * group_num
+        self.D1 = d_mid
+        d_latent = d_mid * group_num
         self.layer2 = MonoMoE(num_experts_second,
                               d_latent, d_final,
                               mlp_layers)
@@ -42,6 +42,7 @@ class DeepME(nn.Module):
         assert len(group2_group_dict)==1
     def load_layers(self, state_dict):
         self.layer1.load_state_dict(state_dict)
+        print("加载layer1参数")
     def freeze_layers(self):
         for param in list(self.layer1.parameters()):
             param.requires_grad = False
@@ -56,7 +57,7 @@ class DeepME(nn.Module):
         all_z = []
         all_group = self.group2_group_dict["all"]
         for g in all_group:
-            all_z += z[g]
+            all_z += [ z[g] ]
         # [(B,D) x G]
         z = torch.stack(all_z,dim=1) # (B,G,D)
         return z
@@ -89,7 +90,7 @@ class DeepME(nn.Module):
         # return:
         # loss: float
         # e_id: (B,)
-        z1, mu, logvar, z1_hat, e_id, _, losses = self(x)
+        z1, mu, logvar, z1_hat, _, e_id, losses = self(x)
         kl_div = cal_kl_div(mu, logvar)
         recons_loss = losses.mean()
         loss = recons_loss + kl_weight * kl_div
@@ -107,6 +108,17 @@ class DeepME(nn.Module):
         z1 = self.layer2.decode(z2, e2) # (B,G*D1)
         z1 = torch.reshape(z1, (B,G,D1))
         z1_dict = self.trans_Tensor_to_dict(z1)
-        xhat = self.layer1(z1_dict, e1)
+        xhat = self.layer1.decode(z1_dict, e1)
         return xhat, z1_dict
+    def soldier_step_out(self,x,e):
+        # x: (B,T,N,d)
+        B,T,N,d = x.shape
+        assert B==1
+        z1_dict, _, _, g1_e = self.layer1(x)
+        z1 = self.trans_dict_to_Tensor(z1_dict) # (B,G,D)
+        z1 = torch.flatten(z1,1,2)
+        expert = self.layer2.all_experts[e]
+        z1_hat, mu2, logvar2 = expert(z1)
+        recons_loss = ((z1_hat - z1)**2).mean()
+        return recons_loss
 

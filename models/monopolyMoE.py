@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from vae import VariationalAutoEncoder, cal_kl_div
+from .vae import VariationalAutoEncoder, cal_kl_div
 
 # encoderDecoder合体型的
 class MonoMoE(nn.Module):
