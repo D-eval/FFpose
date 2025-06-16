@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 # 局部形状重构
 # (B,dT,dN,d) -> (B,D) -> (B,dT,dN,d)
 
-from .STLocalmonopolyMoE import LocalMonopolyMoE
+from .STLocalmonopolyMoE_1 import LocalMonopolyMoE
 
 class GlobalmonopolyMoE(nn.Module):
     def __init__(self,

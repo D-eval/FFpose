@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 # 局部形状重构
 # (B,dT,dN,d) -> (B,D) -> (B,dT,dN,d)
 
-from .STEncoder import LocalAE
+from .STEncoder_1 import LocalAE
 
 def cal_kl_div(mu, logvar):
     kl_div = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
